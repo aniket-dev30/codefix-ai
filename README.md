@@ -2,6 +2,8 @@
 
 An AI-powered code debugger that detects errors, suggests fixes, and explains code using LLM.
 
+🌐 Live Demo: https://codefix-ai.netlify.app/
+
 ---
 
 ## 🔥 Overview
@@ -31,17 +33,6 @@ Users can paste their code, and the system analyzes it using AI to identify erro
 | HTTP Client  | Axios |
 | Config       | dotenv |
 
----
-
-## 📸 Screenshots
-
-### 🟢 Debug Output
-<img width="1922" height="902" alt="debug output" src="https://github.com/user-attachments/assets/2fb3d1c9-35f4-4d4c-8f0d-b079837dac08" />
-
----
-
-### 🟢 Explanation View
-<img width="1922" height="902" alt="code explanation" src="https://github.com/user-attachments/assets/48ff90f2-0447-4f72-b7e0-6cbb7e0ec9b5" />
 
 ---
 
