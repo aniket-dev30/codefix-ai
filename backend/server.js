@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import Groq from "groq-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
@@ -9,18 +9,22 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "500kb" }));
 
-console.log("GROQ KEY:", process.env.GROQ_API_KEY ? "Loaded ✅" : "Missing ❌");
+console.log("GEMINI KEY:", process.env.GEMINI_API_KEY ? "Loaded ✅" : "Missing ❌");
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// ✅ Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// ✅ Create model ONCE
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+});
 
 const VALID_LANGUAGES = ["javascript", "python", "cpp", "java"];
 
-// Strips markdown code fences and extracts the first {...} JSON block
+// Clean JSON response
 function extractJSON(raw) {
-  // Remove ```json ... ``` or ``` ... ``` fences
   let text = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
 
-  // Find the first { ... } block in case the model added preamble text
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start !== -1 && end !== -1 && end > start) {
@@ -37,12 +41,12 @@ app.get("/", (req, res) => {
 app.post("/debug", async (req, res) => {
   const { code, language } = req.body;
 
-  // --- Input validation ---
+  // Validation
   if (!code || typeof code !== "string" || !code.trim()) {
     return res.status(400).json({
       errors: ["No code provided."],
       fixedCode: "",
-      explanation: "Send a non-empty `code` field in the request body.",
+      explanation: "Send a non-empty `code` field.",
     });
   }
 
@@ -50,53 +54,53 @@ app.post("/debug", async (req, res) => {
     return res.status(400).json({
       errors: ["Code too large (max 20,000 characters)."],
       fixedCode: "",
-      explanation: "Please send a smaller snippet.",
+      explanation: "Send a smaller snippet.",
     });
   }
 
   const lang = VALID_LANGUAGES.includes(language) ? language : "javascript";
 
   try {
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.2,           // lower = more deterministic / less hallucination
-      max_tokens: 4096,
-      response_format: { type: "json_object" }, // forces Groq to return valid JSON
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert ${lang} code debugger. 
-Analyze the code and return ONLY a JSON object with exactly these keys:
-- "errors": array of strings describing each bug found (empty array if none)
-- "fixedCode": string with the corrected code (empty string if no fix needed)
-- "explanation": string explaining what was wrong and what was fixed
+    // ✅ Gemini Prompt
+    const prompt = `
+You are an expert ${lang} code debugger.
 
-Do not include markdown, comments, or any text outside the JSON object.`,
-        },
-        {
-          role: "user",
-          content: `Debug this ${lang} code:\n\n${code}`,
-        },
-      ],
-    });
+Return ONLY valid JSON:
 
-    const raw = response.choices[0]?.message?.content ?? "";
+{
+  "errors": [],
+  "fixedCode": "",
+  "explanation": ""
+}
+
+Rules:
+- No markdown
+- No extra text
+- Only JSON
+
+Code:
+${code}
+`;
+
+    // ✅ Gemini API Call
+    const result = await model.generateContent(prompt);
+    const raw = await result.response.text();
+
     const cleaned = extractJSON(raw);
 
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error("JSON parse failed. Raw response:\n", raw);
-      // Still return something useful instead of a 500
+      console.error("JSON parse failed:\n", raw);
+
       return res.status(422).json({
-        errors: ["The AI returned an unexpected format."],
+        errors: ["AI returned invalid format"],
         fixedCode: "",
         explanation: raw,
       });
     }
 
-    // Normalise shape — ensure all three keys always exist
     res.json({
       errors: Array.isArray(parsed.errors) ? parsed.errors : [],
       fixedCode: typeof parsed.fixedCode === "string" ? parsed.fixedCode : "",
@@ -104,15 +108,12 @@ Do not include markdown, comments, or any text outside the JSON object.`,
     });
 
   } catch (error) {
-    console.error("Groq Error:", error);
+    console.error("Gemini Error:", error);
 
-    const status = error?.status ?? 500;
-    const message = error?.message ?? "Unknown error";
-
-    res.status(status >= 400 && status < 600 ? status : 500).json({
-      errors: ["API error: " + message],
+    res.status(500).json({
+      errors: ["API error: " + error.message],
       fixedCode: "",
-      explanation: "Check your GROQ_API_KEY and model availability.",
+      explanation: "Check GEMINI_API_KEY and model.",
     });
   }
 });

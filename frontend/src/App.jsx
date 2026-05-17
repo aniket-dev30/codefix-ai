@@ -20,14 +20,10 @@ const EXT_TO_LANG = {
   java: "java",
 };
 
-<<<<<<< HEAD
+
 const ACCEPTED_EXTS = Object.keys(EXT_TO_LANG);
-=======
-      const res = await axios.post("https://codefix-ai-dn7x.onrender.com", {
-        code,
-        language: "javascript",
-      });
->>>>>>> 2b0468827ffee8aec044af290042d0e4227bcbfd
+
+     
 
 // Encode code + language into a compact base64url query param
 function encodeSession(code, language) {
@@ -510,7 +506,7 @@ function LoadingSkeleton() {
   );
 }
 
-<<<<<<< HEAD
+
 function App() {
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("javascript");
@@ -948,6 +944,4 @@ function App() {
 }
 
 export default App;
-=======
-export default App;
->>>>>>> 2b0468827ffee8aec044af290042d0e4227bcbfd
+
