@@ -23,7 +23,10 @@ const EXT_TO_LANG = {
 
 const ACCEPTED_EXTS = Object.keys(EXT_TO_LANG);
 
-     
+      const res = await axios.post("https://codefix-ai-dn7x.onrender.com", {
+        code,
+        language: "javascript",
+      });
 
 // Encode code + language into a compact base64url query param
 function encodeSession(code, language) {
