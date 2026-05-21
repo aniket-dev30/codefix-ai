@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import axios from "axios";
 import Editor from "@monaco-editor/react";
 
+const BACKEND_URL = "https://codefix-ai-dn7x.onrender.com";
+
 const LANGUAGES = [
   { value: "javascript", label: "JavaScript", icon: "JS" },
   { value: "python", label: "Python", icon: "PY" },
@@ -22,51 +24,38 @@ const EXT_TO_LANG = {
 
 const ACCEPTED_EXTS = Object.keys(EXT_TO_LANG);
 
-const cleanExplanation = (text) => {
-  return text
-    .replace(/\*\*/g, "")
-    .replace(/`/g, "");
-};
+const cleanExplanation = (text) =>
+  text.replace(/\*\*/g, "").replace(/`/g, "");
 
-// Parse explanation into bullet points from various formats:
-// "1. foo 2. bar", "• foo • bar", "- foo\n- bar", or plain paragraphs
 const parseExplanationPoints = (text) => {
   const cleaned = cleanExplanation(text).trim();
 
-  // Inline numbered list: "1. foo 2. bar"
-  const inlineNumbered = Array.from(cleaned.matchAll(/\d+\.\s+([^\n]+?)(?=(?:\d+\.\s+|$))/g)).map(
-    (match) => match[1].trim()
-  ).filter(Boolean);
+  // Inline numbered list: "1. foo 2. bar 3. baz"
+  const inlineNumbered = Array.from(
+    cleaned.matchAll(/\d+\.\s+([^\n]+?)(?=(?:\s*\d+\.\s+|$))/g)
+  )
+    .map((m) => m[1].trim())
+    .filter(Boolean);
   if (inlineNumbered.length > 1) return inlineNumbered;
 
-  const lines = cleaned.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = cleaned.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length > 1) {
-    const isBulleted = lines.every((line) => /^[\u2022•\-*]\s+/.test(line));
-    if (isBulleted) {
-      return lines
-        .map((line) => line.replace(/^[\u2022•\-*]\s+/, "").trim())
-        .filter(Boolean);
-    }
-
-    const numberedLines = lines.every((line) => /^\d+\.\s+/.test(line));
-    if (numberedLines) {
-      return lines
-        .map((line) => line.replace(/^\d+\.\s+/, "").trim())
-        .filter(Boolean);
-    }
-
+    if (lines.every((l) => /^[\u2022•\-*]\s+/.test(l)))
+      return lines.map((l) => l.replace(/^[\u2022•\-*]\s+/, "").trim()).filter(Boolean);
+    if (lines.every((l) => /^\d+\.\s+/.test(l)))
+      return lines.map((l) => l.replace(/^\d+\.\s+/, "").trim()).filter(Boolean);
     return lines;
   }
 
-  // Fallback: single block
   return [cleaned];
 };
-
 
 function encodeSession(code, language) {
   const payload = JSON.stringify({ c: code, l: language });
   return btoa(unescape(encodeURIComponent(payload)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 function decodeSession(param) {
@@ -90,17 +79,13 @@ const styles = {
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
     overflowX: "hidden",
   },
-  header: {
-    textAlign: "center",
-    marginBottom: "48px",
-    paddingTop: "16px",
-  },
+  header: { textAlign: "center", marginBottom: "48px", paddingTop: "16px" },
   badge: {
     display: "inline-flex",
     alignItems: "center",
     gap: "8px",
-    background: "rgba(34, 197, 94, 0.1)",
-    border: "1px solid rgba(34, 197, 94, 0.3)",
+    background: "rgba(34,197,94,0.1)",
+    border: "1px solid rgba(34,197,94,0.3)",
     borderRadius: "999px",
     padding: "6px 16px",
     fontSize: "13px",
@@ -128,12 +113,7 @@ const styles = {
     lineHeight: 1.1,
     padding: "4px 0",
   },
-  subtitle: {
-    fontSize: "15px",
-    color: "#64748b",
-    margin: 0,
-    fontFamily: "system-ui, sans-serif",
-  },
+  subtitle: { fontSize: "15px", color: "#64748b", margin: 0, fontFamily: "system-ui, sans-serif" },
   layout: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
@@ -141,18 +121,8 @@ const styles = {
     maxWidth: "1400px",
     margin: "0 auto",
   },
-  panel: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "12px",
-    minWidth: 0,
-  },
-  panelHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: "36px",
-  },
+  panel: { display: "flex", flexDirection: "column", gap: "12px", minWidth: 0 },
+  panelHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "36px" },
   panelTitle: {
     fontSize: "13px",
     fontWeight: "600",
@@ -161,10 +131,7 @@ const styles = {
     letterSpacing: "0.1em",
     margin: 0,
   },
-  langTabs: {
-    display: "flex",
-    gap: "6px",
-  },
+  langTabs: { display: "flex", gap: "6px" },
   langTab: (active) => ({
     padding: "6px 14px",
     borderRadius: "6px",
@@ -181,9 +148,7 @@ const styles = {
   editorWrap: (isDragging) => ({
     borderRadius: "12px",
     overflow: "hidden",
-    border: isDragging
-      ? "1.5px dashed rgba(34,197,94,0.7)"
-      : "1px solid rgba(255,255,255,0.08)",
+    border: isDragging ? "1.5px dashed rgba(34,197,94,0.7)" : "1px solid rgba(255,255,255,0.08)",
     background: isDragging ? "rgba(34,197,94,0.04)" : "#0d1117",
     flex: 1,
     position: "relative",
@@ -222,12 +187,7 @@ const styles = {
     maxWidth: "200px",
     overflow: "hidden",
   }),
-  fileChipName: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    fontSize: "12px",
-  },
+  fileChipName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12px" },
   clearFileBtn: {
     background: "none",
     border: "none",
@@ -260,11 +220,7 @@ const styles = {
     gap: "7px",
     padding: "8px 18px",
     background:
-      state === "copied"
-        ? "rgba(34,197,94,0.15)"
-        : state === "disabled"
-        ? "transparent"
-        : "rgba(255,255,255,0.05)",
+      state === "copied" ? "rgba(34,197,94,0.15)" : state === "disabled" ? "transparent" : "rgba(255,255,255,0.05)",
     border:
       state === "copied"
         ? "1px solid rgba(34,197,94,0.4)"
@@ -272,8 +228,7 @@ const styles = {
         ? "1px solid rgba(255,255,255,0.06)"
         : "1px solid rgba(255,255,255,0.12)",
     borderRadius: "8px",
-    color:
-      state === "copied" ? "#4ade80" : state === "disabled" ? "#334155" : "#94a3b8",
+    color: state === "copied" ? "#4ade80" : state === "disabled" ? "#334155" : "#94a3b8",
     fontSize: "13px",
     fontWeight: "600",
     cursor: state === "disabled" ? "not-allowed" : "pointer",
@@ -302,18 +257,8 @@ const styles = {
     borderBottom: "1px solid rgba(255,255,255,0.06)",
     background: "#0d1117",
   },
-  trafficDot: (color) => ({
-    width: "10px",
-    height: "10px",
-    borderRadius: "50%",
-    background: color,
-  }),
-  editorFilename: {
-    fontSize: "12px",
-    color: "#475569",
-    marginLeft: "8px",
-    fontFamily: "inherit",
-  },
+  trafficDot: (color) => ({ width: "10px", height: "10px", borderRadius: "50%", background: color }),
+  editorFilename: { fontSize: "12px", color: "#475569", marginLeft: "8px", fontFamily: "inherit" },
   debugBtn: (disabled, loading) => ({
     padding: "14px 28px",
     background:
@@ -335,11 +280,7 @@ const styles = {
     justifyContent: "center",
     gap: "10px",
     letterSpacing: "0.02em",
-    boxShadow: disabled
-      ? "none"
-      : loading
-      ? "0 0 16px rgba(34,197,94,0.15)"
-      : "0 0 28px rgba(34,197,94,0.3)",
+    boxShadow: disabled ? "none" : loading ? "0 0 16px rgba(34,197,94,0.15)" : "0 0 28px rgba(34,197,94,0.3)",
     width: "100%",
   }),
   outputBox: {
@@ -449,15 +390,7 @@ const styles = {
     fontFamily: "inherit",
     transition: "all 0.2s",
   }),
-  pre: {
-    margin: 0,
-    padding: "20px",
-    fontSize: "13px",
-    lineHeight: "1.7",
-    overflowX: "auto",
-    color: "#e2e8f0",
-  },
-  // ── FIXED: explanation container ──────────────────────────────────────────
+  pre: { margin: 0, padding: "20px", fontSize: "13px", lineHeight: "1.7", overflowX: "auto", color: "#e2e8f0" },
   explanation: {
     background: "rgba(96,165,250,0.06)",
     border: "1px solid rgba(96,165,250,0.15)",
@@ -477,18 +410,13 @@ const styles = {
   },
   bulletDot: {
     flexShrink: 0,
-    marginTop: "7px",
+    marginTop: "8px",
     width: "6px",
     height: "6px",
     borderRadius: "50%",
     background: "#60a5fa",
   },
-  // ─────────────────────────────────────────────────────────────────────────
-  divider: {
-    border: "none",
-    borderTop: "1px solid rgba(255,255,255,0.06)",
-    margin: "24px 0",
-  },
+  divider: { border: "none", borderTop: "1px solid rgba(255,255,255,0.06)", margin: "24px 0" },
   loadingWrap: { display: "flex", flexDirection: "column", gap: "16px", padding: "4px 0" },
   skeleton: (width, height) => ({
     width,
@@ -505,6 +433,21 @@ const styles = {
     borderRadius: "50%",
     animation: "spin 0.7s linear infinite",
     flexShrink: 0,
+  },
+  // Connection warning banner
+  warnBanner: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "10px",
+    padding: "12px 16px",
+    background: "rgba(251,191,36,0.08)",
+    border: "1px solid rgba(251,191,36,0.25)",
+    borderRadius: "8px",
+    fontSize: "13px",
+    color: "#fbbf24",
+    fontFamily: "system-ui, sans-serif",
+    lineHeight: "1.6",
+    marginBottom: "16px",
   },
 };
 
@@ -537,7 +480,6 @@ function LoadingSkeleton() {
   );
 }
 
-// ── FIXED: Explanation renderer ───────────────────────────────────────────────
 function ExplanationBlock({ text }) {
   const points = parseExplanationPoints(text);
   return (
@@ -551,7 +493,6 @@ function ExplanationBlock({ text }) {
     </div>
   );
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 function App() {
   const [code, setCode] = useState("");
@@ -608,16 +549,16 @@ function App() {
     if (!file) return;
     const ext = file.name.split(".").pop().toLowerCase();
     if (!ACCEPTED_EXTS.includes(ext)) {
-      setFileError(`Unsupported file type ".${ext}". Use: ${ACCEPTED_EXTS.map((e) => `.${e}`).join(", ")}`);
+      setFileError(
+        `Unsupported file type ".${ext}". Use: ${ACCEPTED_EXTS.map((e) => `.${e}`).join(", ")}`
+      );
       setTimeout(() => setFileError(null), 3500);
       return;
     }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target.result;
-      setCode(text);
-      const detectedLang = EXT_TO_LANG[ext] || "javascript";
-      setLanguage(detectedLang);
+      setCode(e.target.result);
+      setLanguage(EXT_TO_LANG[ext] || "javascript");
       setLoadedFile(file.name);
       setResult(null);
       setFileError(null);
@@ -665,37 +606,34 @@ function App() {
     [loadFile]
   );
 
-  const handleDebug = async () => {
+  const handleDebug = useCallback(async () => {
     if (!code.trim()) return;
+    setLoading(true);
+    setResult(null);
+    setLastLang(language);
     try {
-      setLoading(true);
-      setResult(null);
-      setLastLang(language);
-      const BACKEND_URL =
-        import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-
-      const res = await axios.post(`${BACKEND_URL}/debug`, {
-        code,
-        language,
-      });
+      const res = await axios.post(`${BACKEND_URL}/debug`, { code, language });
       setResult(res.data);
     } catch (err) {
-      console.error("Error:", err);
-      const response = err?.response;
+      console.error("Debug error:", err);
+      const isNetwork = !err.response;
+      const serverMsg = err.response?.data;
       setResult({
         errors: [
-          response?.data?.errors?.[0] || err.message || "Failed to connect to the backend. Check deployment or API URL.",
+          isNetwork
+            ? "Cannot reach the backend. Render free-tier may be asleep — wait 30s and retry."
+            : serverMsg?.errors?.[0] || err.message || "Server error.",
         ],
-        fixedCode: "",
-        explanation:
-          response?.data?.explanation || err.message ||
-          "Unable to reach the debug server. Make sure the backend is running.",
-        connectionError: !response,
+        fixedCode: serverMsg?.fixedCode || "",
+        explanation: isNetwork
+          ? "The Render backend spins down after inactivity. Give it 30 seconds to wake up, then try again."
+          : serverMsg?.explanation || err.message || "Server returned an error.",
+        connectionError: isNetwork,
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [code, language]);
 
   const handleKeyDown = useCallback(
     (e) => {
@@ -704,7 +642,7 @@ function App() {
         handleDebug();
       }
     },
-    [code, language]
+    [handleDebug]
   );
 
   const langLabel = LANGUAGES.find((l) => l.value === lastLang)?.label;
@@ -716,18 +654,16 @@ function App() {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @keyframes spin { to{transform:rotate(360deg)} }
         @keyframes shimmer {
-          0%{background-color:rgba(255,255,255,0.04)}
-          50%{background-color:rgba(255,255,255,0.09)}
-          100%{background-color:rgba(255,255,255,0.04)}
+          0%  { background-color: rgba(255,255,255,0.04); }
+          50% { background-color: rgba(255,255,255,0.09); }
+          100%{ background-color: rgba(255,255,255,0.04); }
         }
         @keyframes dropFadeIn { from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)} }
         body { margin: 0; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
-        @media (max-width: 900px) {
-          .debugger-layout { grid-template-columns: 1fr !important; }
-        }
+        ::-webkit-scrollbar { width:6px; height:6px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.12); border-radius:3px; }
+        @media (max-width: 900px) { .debugger-layout { grid-template-columns:1fr !important; } }
       `}</style>
 
       <div style={styles.root} onKeyDown={handleKeyDown}>
@@ -748,11 +684,12 @@ function App() {
               disabled={!code.trim()}
               title={!code.trim() ? "Add code to share" : "Copy shareable link"}
             >
-              {shareState === "copied" ? <> ✓ Link copied! </> : <> ⬆ Share session </>}
+              {shareState === "copied" ? "✓ Link copied!" : "⬆ Share session"}
             </button>
           </div>
         </div>
 
+        {/* Restored-session banner */}
         {loadedFromUrl && (
           <div style={{ maxWidth: "1400px", margin: "-28px auto 24px" }}>
             <div style={styles.sharedBanner}>
@@ -760,24 +697,15 @@ function App() {
               <span>Loaded from a shared session — code and language restored.</span>
               <button
                 onClick={() => setLoadedFromUrl(false)}
-                style={{
-                  marginLeft: "auto",
-                  background: "none",
-                  border: "none",
-                  color: "#4ade80",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  padding: 0,
-                }}
-              >
-                ✕
-              </button>
+                style={{ marginLeft: "auto", background: "none", border: "none", color: "#4ade80", cursor: "pointer", fontSize: "14px", padding: 0 }}
+              >✕</button>
             </div>
           </div>
         )}
 
         {/* PANELS */}
         <div style={styles.layout} className="debugger-layout">
+
           {/* LEFT — Input */}
           <div style={styles.panel}>
             <div style={styles.panelHeader}>
@@ -786,20 +714,12 @@ function App() {
                 {loadedFile && (
                   <div style={styles.fileChip(true)}>
                     <span style={{ fontSize: "14px" }}>📄</span>
-                    <span style={styles.fileChipName} title={loadedFile}>
-                      {loadedFile}
-                    </span>
+                    <span style={styles.fileChipName} title={loadedFile}>{loadedFile}</span>
                     <button
                       style={styles.clearFileBtn}
-                      onClick={() => {
-                        setLoadedFile(null);
-                        setCode("");
-                        setResult(null);
-                      }}
+                      onClick={() => { setLoadedFile(null); setCode(""); setResult(null); }}
                       title="Clear file"
-                    >
-                      ✕
-                    </button>
+                    >✕</button>
                   </div>
                 )}
                 <input
@@ -809,11 +729,7 @@ function App() {
                   style={{ display: "none" }}
                   onChange={handleFileInput}
                 />
-                <button
-                  style={styles.uploadBtn}
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Browse file"
-                >
+                <button style={styles.uploadBtn} onClick={() => fileInputRef.current?.click()}>
                   ↑ Upload file
                 </button>
                 <div style={styles.langTabs}>
@@ -831,17 +747,15 @@ function App() {
             </div>
 
             {fileError && (
-              <div
-                style={{
-                  padding: "10px 16px",
-                  background: "rgba(248,113,113,0.1)",
-                  border: "1px solid rgba(248,113,113,0.25)",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  color: "#f87171",
-                  fontFamily: "system-ui, sans-serif",
-                }}
-              >
+              <div style={{
+                padding: "10px 16px",
+                background: "rgba(248,113,113,0.1)",
+                border: "1px solid rgba(248,113,113,0.25)",
+                borderRadius: "8px",
+                fontSize: "13px",
+                color: "#f87171",
+                fontFamily: "system-ui, sans-serif",
+              }}>
                 ⚠ {fileError}
               </div>
             )}
@@ -865,17 +779,12 @@ function App() {
                 <span style={styles.trafficDot("#febc2e")} />
                 <span style={styles.trafficDot("#28c840")} />
                 <span style={styles.editorFilename}>
-                  {loadedFile
-                    ? loadedFile
-                    : `debug.${
-                        currentLang?.value === "cpp"
-                          ? "cpp"
-                          : currentLang?.value === "java"
-                          ? "java"
-                          : currentLang?.value === "python"
-                          ? "py"
-                          : "js"
-                      }`}
+                  {loadedFile || `debug.${
+                    currentLang?.value === "cpp" ? "cpp"
+                    : currentLang?.value === "java" ? "java"
+                    : currentLang?.value === "python" ? "py"
+                    : "js"
+                  }`}
                 </span>
               </div>
               <Editor
@@ -905,17 +814,9 @@ function App() {
               style={styles.debugBtn(!code.trim(), loading)}
             >
               {loading ? (
-                <>
-                  <span style={styles.spinner} />
-                  Analyzing…
-                </>
+                <><span style={styles.spinner} /> Analyzing…</>
               ) : (
-                <>
-                  ⚡ Debug Code
-                  <span style={{ fontSize: "11px", opacity: 0.6, fontWeight: "400" }}>
-                    ⌘↵
-                  </span>
-                </>
+                <>⚡ Debug Code <span style={{ fontSize: "11px", opacity: 0.6, fontWeight: "400" }}>⌘↵</span></>
               )}
             </button>
           </div>
@@ -936,12 +837,21 @@ function App() {
                 <LoadingSkeleton />
               ) : result ? (
                 <>
+                  {/* Render cold-start / network warning */}
+                  {result.connectionError && (
+                    <div style={styles.warnBanner}>
+                      <span style={{ fontSize: "16px", flexShrink: 0 }}>⚠</span>
+                      <span>
+                        The Render backend may be asleep (free tier spins down after 15 min of inactivity).
+                        Wait ~30 seconds, then click <strong>Debug Code</strong> again.
+                      </span>
+                    </div>
+                  )}
+
                   {/* ERRORS */}
                   <h3 style={styles.sectionTitle("#f87171")}>
                     <span style={styles.sectionAccent("#f87171")} />
-                    {result.connectionError
-                      ? "Connection Error"
-                      : `Errors · ${result.errors?.length ?? 0} found`}
+                    {result.connectionError ? "Connection Error" : `Errors · ${result.errors?.length ?? 0} found`}
                   </h3>
                   <ul style={styles.errorList}>
                     {result.errors?.map((err, i) => (
@@ -964,9 +874,7 @@ function App() {
                           <span style={styles.codeLangBadge}>{langLabel}</span>
                           <CopyButton text={result.fixedCode} />
                         </div>
-                        <pre style={styles.pre}>
-                          <code>{result.fixedCode}</code>
-                        </pre>
+                        <pre style={styles.pre}><code>{result.fixedCode}</code></pre>
                       </div>
                     </>
                   )}
@@ -978,7 +886,6 @@ function App() {
                         <span style={styles.sectionAccent("#60a5fa")} />
                         Explanation
                       </h3>
-                      {/* ── FIXED: use ExplanationBlock instead of the broken inline split ── */}
                       <ExplanationBlock text={result.explanation} />
                     </>
                   )}
