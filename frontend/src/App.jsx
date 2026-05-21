@@ -21,45 +21,47 @@ const EXT_TO_LANG = {
 };
 
 const ACCEPTED_EXTS = Object.keys(EXT_TO_LANG);
-   const res = await axios.post("https://codefix-ai-dn7x.onrender.com", {
-        code,
-        language: "javascript",
-      });
-
 
 const cleanExplanation = (text) => {
   return text
-    .replace(/^\s*Explanation\s*[:\-]\s*/i, "")
-    .replace(/\*\*|__|~~/g, "")
+    .replace(/\*\*/g, "")
     .replace(/`/g, "");
 };
 
 // Parse explanation into bullet points from various formats:
-// "1. foo 2. bar", "• foo • bar", "- foo\n- bar", or plain sentences.
+// "1. foo 2. bar", "• foo • bar", "- foo\n- bar", or plain paragraphs
 const parseExplanationPoints = (text) => {
   const cleaned = cleanExplanation(text).trim();
-  if (!cleaned) return [];
 
-  const numberList = cleaned.split(/(?:^|\n)\s*\d+[\.)]\s+/).map((item) => item.trim()).filter(Boolean);
-  if (numberList.length > 1) return numberList;
+  // Inline numbered list: "1. foo 2. bar"
+  const inlineNumbered = Array.from(cleaned.matchAll(/\d+\.\s+([^\n]+?)(?=(?:\d+\.\s+|$))/g)).map(
+    (match) => match[1].trim()
+  ).filter(Boolean);
+  if (inlineNumbered.length > 1) return inlineNumbered;
 
-  const bracketedList = cleaned.split(/(?:^|\n)\s*[A-Za-z][\.)]\s+/).map((item) => item.trim()).filter(Boolean);
-  if (bracketedList.length > 1) return bracketedList;
+  const lines = cleaned.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const isBulleted = lines.every((line) => /^[\u2022•\-*]\s+/.test(line));
+    if (isBulleted) {
+      return lines
+        .map((line) => line.replace(/^[\u2022•\-*]\s+/, "").trim())
+        .filter(Boolean);
+    }
 
-  const bulletItems = cleaned.split(/(?:^|\n)\s*[•\-\*]\s+/).map((item) => item.trim()).filter(Boolean);
-  if (bulletItems.length > 1) return bulletItems;
+    const numberedLines = lines.every((line) => /^\d+\.\s+/.test(line));
+    if (numberedLines) {
+      return lines
+        .map((line) => line.replace(/^\d+\.\s+/, "").trim())
+        .filter(Boolean);
+    }
 
-  const lineItems = cleaned.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  if (lineItems.length > 1) return lineItems;
+    return lines;
+  }
 
-  const sentenceItems = cleaned
-    .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (sentenceItems.length > 1) return sentenceItems;
-
+  // Fallback: single block
   return [cleaned];
 };
+
 
 function encodeSession(code, language) {
   const payload = JSON.stringify({ c: code, l: language });
@@ -669,19 +671,26 @@ function App() {
       setLoading(true);
       setResult(null);
       setLastLang(language);
-      const res = await axios.post("https://codefix-ai-dn7x.onrender.com/debug", {
+      const BACKEND_URL =
+        import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+
+      const res = await axios.post(`${BACKEND_URL}/debug`, {
         code,
         language,
       });
       setResult(res.data);
     } catch (err) {
       console.error("Error:", err);
+      const response = err?.response;
       setResult({
-        errors: ["Failed to connect to the backend. Check deployment or API URL."],
+        errors: [
+          response?.data?.errors?.[0] || err.message || "Failed to connect to the backend. Check deployment or API URL.",
+        ],
         fixedCode: "",
         explanation:
+          response?.data?.explanation || err.message ||
           "Unable to reach the debug server. Make sure the backend is running.",
-        connectionError: true,
+        connectionError: !response,
       });
     } finally {
       setLoading(false);
