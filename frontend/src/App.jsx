@@ -64,8 +64,18 @@ function decodeSession(param) {
     const json = decodeURIComponent(escape(atob(padded)));
     const { c, l } = JSON.parse(json);
     if (typeof c === "string" && typeof l === "string") return { code: c, language: l };
-  } catch {}
+  } catch {
+    return null;
+  }
   return null;
+}
+
+function getSharedSessionFromUrl() {
+  if (typeof window === "undefined") return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const sessionParam = params.get("s");
+  return sessionParam ? decodeSession(sessionParam) : null;
 }
 
 const styles = {
@@ -495,33 +505,29 @@ function ExplanationBlock({ text }) {
 }
 
 function App() {
-  const [code, setCode] = useState("");
-  const [language, setLanguage] = useState("javascript");
+  const [initialSession] = useState(() => getSharedSessionFromUrl());
+  const initialLanguage = LANGUAGES.some((l) => l.value === initialSession?.language)
+    ? initialSession.language
+    : "javascript";
+  const [code, setCode] = useState(() => initialSession?.code || "");
+  const [language, setLanguage] = useState(initialLanguage);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [lastLang, setLastLang] = useState("javascript");
+  const [lastLang, setLastLang] = useState(initialLanguage);
   const [isDragging, setIsDragging] = useState(false);
   const [loadedFile, setLoadedFile] = useState(null);
   const [fileError, setFileError] = useState(null);
   const [shareState, setShareState] = useState("idle");
-  const [loadedFromUrl, setLoadedFromUrl] = useState(false);
+  const [showLoadedBanner, setShowLoadedBanner] = useState(() => Boolean(initialSession));
   const fileInputRef = useRef(null);
   const dragCounterRef = useRef(0);
 
   const currentLang = LANGUAGES.find((l) => l.value === language);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const s = params.get("s");
-    if (!s) return;
-    const session = decodeSession(s);
-    if (!session) return;
-    const validLang = LANGUAGES.find((l) => l.value === session.language);
-    setCode(session.code);
-    setLanguage(validLang ? session.language : "javascript");
-    setLoadedFromUrl(true);
+    if (!initialSession) return;
     window.history.replaceState({}, "", window.location.pathname);
-  }, []);
+  }, [initialSession]);
 
   const handleShare = useCallback(async () => {
     if (!code.trim()) return;
@@ -690,13 +696,13 @@ function App() {
         </div>
 
         {/* Restored-session banner */}
-        {loadedFromUrl && (
+        {showLoadedBanner && (
           <div style={{ maxWidth: "1400px", margin: "-28px auto 24px" }}>
             <div style={styles.sharedBanner}>
               <span style={{ fontSize: "16px" }}>🔗</span>
               <span>Loaded from a shared session — code and language restored.</span>
               <button
-                onClick={() => setLoadedFromUrl(false)}
+                onClick={() => setShowLoadedBanner(false)}
                 style={{ marginLeft: "auto", background: "none", border: "none", color: "#4ade80", cursor: "pointer", fontSize: "14px", padding: 0 }}
               >✕</button>
             </div>
