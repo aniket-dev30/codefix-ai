@@ -29,7 +29,7 @@ Users can paste their code, and the system analyzes it using AI to identify erro
 |-------------|-----------|
 | Frontend     | React.js (Vite) |
 | Backend      | Node.js, Express.js |
-| AI Engine    | Groq LLM API |
+| AI Engine    | Gemini LLM API |
 | HTTP Client  | Axios |
 | Config       | dotenv |
 
